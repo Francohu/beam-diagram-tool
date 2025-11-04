@@ -3,6 +3,11 @@
 // performs a simple finite element analysis for Euler–Bernoulli beams,
 // and plots shear force and bending moment diagrams using Plotly.
 
+// Global variables to hold the latest computed results and animation state
+// These will be populated by computeBeam() and used by animateDiagrams().
+window.latestResult = null;
+window.animationInterval = null;
+
 // On page load, insert one empty row for each load type
 document.addEventListener('DOMContentLoaded', () => {
   addPointLoadRow();
@@ -1200,6 +1205,16 @@ function computeBeam() {
   const deflection = result.v.map(vv => vv / (E_val * I_val));
   // Compute bending stress at extreme fiber: sigma = M*c/I
   const stress = result.M.map(mVal => (mVal * c_val) / I_val);
+
+  // Store the latest computed arrays globally for animation later.
+  // We copy the arrays to avoid mutation during animation.
+  window.latestResult = {
+    x: result.x.slice(),
+    V: result.V.slice(),
+    M: result.M.slice(),
+    deflection: deflection.slice(),
+    stress: stress.slice()
+  };
   // Plot deflection diagram with emphasised axes
   {
     const xValsDef = result.x;
@@ -1343,6 +1358,218 @@ function computeBeam() {
     reactStr += '<br>';
   }
   document.getElementById('reactionResults').innerHTML = reactStr;
+}
+
+/**
+ * Animate the shear force, bending moment, deflection and stress diagrams.
+ * This function progressively reveals each curve from left to right using
+ * a timed interval. It requires that computeBeam() has been called at
+ * least once to populate window.latestResult with the computed arrays.
+ */
+function animateDiagrams() {
+  // Ensure there is a result to animate
+  if (!window.latestResult || !window.latestResult.x) {
+    alert('Please compute the diagrams before animating.');
+    return;
+  }
+  const xVals = window.latestResult.x;
+  const shearVals = window.latestResult.V;
+  const momentVals = window.latestResult.M;
+  const deflectionVals = window.latestResult.deflection;
+  const stressVals = window.latestResult.stress;
+  const nPts = xVals.length;
+
+  // Compute y-ranges for each diagram using full arrays to ensure axes remain fixed
+  // Shear
+  let yMinV = Math.min(...shearVals);
+  let yMaxV = Math.max(...shearVals);
+  if (yMinV === yMaxV) {
+    const delta = Math.abs(yMinV) > 0 ? Math.abs(yMinV) * 0.1 : 1;
+    yMinV -= delta;
+    yMaxV += delta;
+  }
+  const shapesV = [
+    { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: yMinV, x1: 0, y1: yMaxV, line: { color: '#000000', width: 2 } },
+    { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: 0, x1: xVals[nPts - 1], y1: 0, line: { color: '#000000', width: 2 } }
+  ];
+  const layoutShear = {
+    title: 'Shear Force Diagram (Animated)',
+    xaxis: {
+      title: 'Position x [m]',
+      showline: true,
+      linecolor: '#000000',
+      linewidth: 2,
+      mirror: true,
+      ticks: 'inside',
+      showticklabels: true,
+      zeroline: true,
+      zerolinecolor: '#000000',
+      zerolinewidth: 2
+    },
+    yaxis: {
+      title: 'V(x) [kN]',
+      showline: true,
+      linecolor: '#000000',
+      linewidth: 2,
+      mirror: true,
+      ticks: 'inside',
+      showticklabels: true,
+      zeroline: true,
+      zerolinecolor: '#000000',
+      zerolinewidth: 2
+    },
+    shapes: shapesV,
+    showlegend: false,
+    margin: { t: 40, r: 20, b: 50, l: 60 }
+  };
+  // Bending moment ranges
+  let yMinM = Math.min(...momentVals);
+  let yMaxM = Math.max(...momentVals);
+  if (yMinM === yMaxM) {
+    const delta = Math.abs(yMinM) > 0 ? Math.abs(yMinM) * 0.1 : 1;
+    yMinM -= delta;
+    yMaxM += delta;
+  }
+  const shapesM = [
+    { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: yMinM, x1: 0, y1: yMaxM, line: { color: '#000000', width: 2 } },
+    { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: 0, x1: xVals[nPts - 1], y1: 0, line: { color: '#000000', width: 2 } }
+  ];
+  const layoutMoment = {
+    title: 'Bending Moment Diagram (Animated)',
+    xaxis: {
+      title: 'Position x [m]',
+      showline: true,
+      linecolor: '#000000',
+      linewidth: 2,
+      mirror: true,
+      ticks: 'inside',
+      showticklabels: true,
+      zeroline: true,
+      zerolinecolor: '#000000',
+      zerolinewidth: 2
+    },
+    yaxis: {
+      title: 'M(x) [kN·m]',
+      showline: true,
+      linecolor: '#000000',
+      linewidth: 2,
+      mirror: true,
+      ticks: 'inside',
+      showticklabels: true,
+      zeroline: true,
+      zerolinecolor: '#000000',
+      zerolinewidth: 2
+    },
+    shapes: shapesM,
+    showlegend: false,
+    margin: { t: 40, r: 20, b: 50, l: 60 }
+  };
+  // Deflection ranges
+  let yMinDef = Math.min(...deflectionVals);
+  let yMaxDef = Math.max(...deflectionVals);
+  if (yMinDef === yMaxDef) {
+    const delta = Math.abs(yMinDef) > 0 ? Math.abs(yMinDef) * 0.1 : 1;
+    yMinDef -= delta;
+    yMaxDef += delta;
+  }
+  const shapesDef = [
+    { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: yMinDef, x1: 0, y1: yMaxDef, line: { color: '#000000', width: 2 } },
+    { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: 0, x1: xVals[nPts - 1], y1: 0, line: { color: '#000000', width: 2 } }
+  ];
+  const layoutDeflection = {
+    title: 'Deflection Diagram (Animated)',
+    xaxis: {
+      title: 'Position x [m]',
+      showline: true,
+      linecolor: '#000000',
+      linewidth: 2,
+      mirror: true,
+      ticks: 'inside',
+      showticklabels: true,
+      zeroline: true,
+      zerolinecolor: '#000000',
+      zerolinewidth: 2
+    },
+    yaxis: {
+      title: 'Deflection',
+      showline: true,
+      linecolor: '#000000',
+      linewidth: 2,
+      mirror: true,
+      ticks: 'inside',
+      showticklabels: true,
+      zeroline: true,
+      zerolinecolor: '#000000',
+      zerolinewidth: 2
+    },
+    shapes: shapesDef,
+    showlegend: false,
+    margin: { t: 40, r: 20, b: 50, l: 60 }
+  };
+  // Stress ranges
+  let yMinStr = Math.min(...stressVals);
+  let yMaxStr = Math.max(...stressVals);
+  if (yMinStr === yMaxStr) {
+    const delta = Math.abs(yMinStr) > 0 ? Math.abs(yMinStr) * 0.1 : 1;
+    yMinStr -= delta;
+    yMaxStr += delta;
+  }
+  const shapesStress = [
+    { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: yMinStr, x1: 0, y1: yMaxStr, line: { color: '#000000', width: 2 } },
+    { type: 'line', xref: 'x', yref: 'y', x0: 0, y0: 0, x1: xVals[nPts - 1], y1: 0, line: { color: '#000000', width: 2 } }
+  ];
+  const layoutStress = {
+    title: 'Bending Stress Diagram (Animated)',
+    xaxis: {
+      title: 'Position x [m]',
+      showline: true,
+      linecolor: '#000000',
+      linewidth: 2,
+      mirror: true,
+      ticks: 'inside',
+      showticklabels: true,
+      zeroline: true,
+      zerolinecolor: '#000000',
+      zerolinewidth: 2
+    },
+    yaxis: {
+      title: 'Stress',
+      showline: true,
+      linecolor: '#000000',
+      linewidth: 2,
+      mirror: true,
+      ticks: 'inside',
+      showticklabels: true,
+      zeroline: true,
+      zerolinecolor: '#000000',
+      zerolinewidth: 2
+    },
+    shapes: shapesStress,
+    showlegend: false,
+    margin: { t: 40, r: 20, b: 50, l: 60 }
+  };
+
+  // Start the animation loop. Clear any existing interval first.
+  if (window.animationInterval) {
+    clearInterval(window.animationInterval);
+  }
+  let index = 1;
+  window.animationInterval = setInterval(() => {
+    if (index > nPts) {
+      clearInterval(window.animationInterval);
+      return;
+    }
+    const xi = xVals.slice(0, index);
+    const Vi = shearVals.slice(0, index);
+    const Mi = momentVals.slice(0, index);
+    const Di = deflectionVals.slice(0, index);
+    const Si = stressVals.slice(0, index);
+    Plotly.react('sfdPlot', [ { x: xi, y: Vi, mode: 'lines', line: { width: 2 } } ], layoutShear);
+    Plotly.react('bmdPlot', [ { x: xi, y: Mi, mode: 'lines', line: { width: 2 } } ], layoutMoment);
+    Plotly.react('deflectionPlot', [ { x: xi, y: Di, mode: 'lines', line: { width: 2 } } ], layoutDeflection);
+    Plotly.react('stressPlot', [ { x: xi, y: Si, mode: 'lines', line: { width: 2 } } ], layoutStress);
+    index++;
+  }, 50);
 }
 
 // Finite element solver for Euler–Bernoulli beam with constant EI and distributed loads
